@@ -4,19 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Flying Logos</title>
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#000000">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Flying Logos">
-  <link rel="apple-touch-icon" href="img/icon.svg">
   <style>
     html, body { height: 100%; margin: 0; background: #000; overflow: hidden; touch-action: none; }
     #canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; will-change: transform; }
-
-    #fsBtn { position: fixed; top: 14px; right: 14px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.18); border-radius: 10px; font-size: 18px; padding: 7px 10px; cursor: pointer; z-index: 6; transition: opacity 1.4s ease; line-height: 1; }
-    #fsBtn:hover, #fsBtn:focus { background: rgba(255,255,255,0.18); outline: none; }
 
     .overlay { position: fixed; top: 0; right: 0; bottom: 0; left: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 10; }
     .panel { width: min(92vw, 1000px); max-height: 86vh; overflow: auto; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.15); border-radius: 18px; padding: clamp(12px, 2.5vw, 24px); box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
@@ -25,9 +15,6 @@
     .card:hover, .card:focus { transform: translateY(-2px); outline-color: rgba(255,255,255,0.85); }
     .card img { max-width: 100%; max-height: 100%; object-fit: contain; background: transparent; pointer-events: none; }
     .chip { position: absolute; left: 10px; top: 10px; font: 11px system-ui,Segoe UI,Roboto,Arial; color: #fff; background: rgba(0,0,0,0.45); padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.25); pointer-events: none; }
-    .hint-bar { color: #cfcfcf; font: 12px system-ui,Segoe UI,Roboto,Arial; margin-top: 10px; text-align: center; opacity: .8; }
-
-    #hint { position: fixed; bottom: clamp(14px, 3vw, 26px); left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.5); font: clamp(11px, 1.4vw, 14px) system-ui,Segoe UI,Roboto,Arial; text-align: center; pointer-events: none; transition: opacity 1.4s ease; white-space: nowrap; z-index: 5; }
 
     @media (max-width: 560px) {
       .grid { grid-template-columns: repeat(auto-fill, minmax(45vw, 1fr)); }
@@ -36,36 +23,26 @@
 </head>
 <body>
   <canvas id="canvas" aria-label="Logo Screensaver"></canvas>
-  <button id="fsBtn" aria-label="Vollbild umschalten" title="Vollbild (F)">⛶</button>
 
   <div id="overlay" class="overlay" role="dialog" aria-modal="true">
     <div class="panel">
       <div id="grid" class="grid"></div>
-      <div class="hint-bar">Tippe außerhalb, um zu schließen · Tippe auf eine Kachel, um Logo + Hintergrund + Größe + Geschwindigkeit zu übernehmen</div>
     </div>
   </div>
 
-  <div id="hint">Tap / ← → Logo wechseln &nbsp;·&nbsp; Halten / OK für Menü &nbsp;·&nbsp; F = Vollbild</div>
-
   <script>
-    // ==========================================================================
-    // KONFIGURATION
-    // ==========================================================================
     const LOGOS = [
       { label: 'Supreme', src: 'img/supreme.png', bg: '#000000', pageBg: '#0b0b0b', sizeVmin: 25, speedVminPerSec: 28 },
       { label: 'Mertra',  src: 'img/mertra.png',  bg: '#ffffff', pageBg: '#ffffff', sizeVmin: 30, speedVminPerSec: 24 },
       { label: 'Mertra2', src: 'img/mertra2.png', bg: '#ffffff', pageBg: '#ffffff', sizeVmin: 30, speedVminPerSec: 24 },
       { label: 'Stussy',  src: 'img/stussy.png',  bg: '#ffffff', pageBg: '#ffffff', sizeVmin: 30, speedVminPerSec: 24 },
-      // ➕ Weitere Logos hier einfügen …
     ];
 
-    const DEFAULT_SIZE_VMIN       = 18;
+    const DEFAULT_SIZE_VMIN        = 18;
     const DEFAULT_SPEED_VMIN_PER_SEC = 26;
-    const LONG_PRESS_MS           = 600;
+    const LONG_PRESS_MS            = 600;
 
-    // ==========================================================================
-    // CANVAS SETUP
-    // ==========================================================================
+    // CANVAS
     const canvas = document.getElementById('canvas');
     const ctx    = canvas.getContext('2d');
 
@@ -81,23 +58,17 @@
     window.addEventListener('resize', () => { resize(); recalcVelocityMagnitude(); clampInside(); }, { passive: true });
     resize();
 
-    // ==========================================================================
-    // BACKGROUND
-    // ==========================================================================
+    // HINTERGRUND
     const bgLayer = document.createElement('div');
     Object.assign(bgLayer.style, { position: 'fixed', top: '0', right: '0', bottom: '0', left: '0', zIndex: '-1', transition: 'background 0.5s ease' });
     document.body.appendChild(bgLayer);
 
-    let currentBg = '#000000';
     function setBackground(bg) {
-      bgLayer.style.background    = bg || '#000';
+      bgLayer.style.background       = bg || '#000';
       document.body.style.background = bg || '#000';
-      currentBg = bg;
     }
 
-    // ==========================================================================
     // LOGO LOADER
-    // ==========================================================================
     const logoImg = new Image();
     logoImg.decoding = 'async';
     let logoReady = false, svgAspect = null, currentLogoIndex = 0;
@@ -130,9 +101,7 @@
       logoImg.src = raw.startsWith('img/') ? ('./' + raw) : raw;
     }
 
-    // ==========================================================================
-    // ANIMATION – responsive Größe & Speed
-    // ==========================================================================
+    // ANIMATION
     let x = 80, y = 80, vx = 1, vy = 0.7, speedMagnitudePx = 220;
 
     function currentTargetWidthPx() {
@@ -162,9 +131,6 @@
       speedMagnitudePx = currentSpeedMagnitudePxPerSec();
       const len = Math.hypot(vx, vy) || 1; vx /= len; vy /= len;
     }
-
-    function cycleNext() { setLogoByIndex(currentLogoIndex + 1); setDirectionRandom(); }
-    function cyclePrev() { setLogoByIndex(currentLogoIndex - 1); setDirectionRandom(); }
 
     function logoDrawSize() {
       const w = currentTargetWidthPx();
@@ -218,9 +184,7 @@
     setDirectionRandom();
     requestAnimationFrame(loop);
 
-    // ==========================================================================
-    // OVERLAY – Logo-Auswahl
-    // ==========================================================================
+    // OVERLAY – Logo-Auswahl per Long-Press
     const overlay = document.getElementById('overlay');
     const grid    = document.getElementById('grid');
 
@@ -236,9 +200,7 @@
 
         const chip = document.createElement('div');
         chip.className = 'chip';
-        const sizeText  = typeof item.sizePx     === 'number' ? item.sizePx     + 'px'    : (item.sizeVmin     ?? DEFAULT_SIZE_VMIN)        + 'vmin';
-        const speedText = typeof item.speedPxPerSec === 'number' ? item.speedPxPerSec + 'px/s' : (item.speedVminPerSec ?? DEFAULT_SPEED_VMIN_PER_SEC) + 'vmin/s';
-        chip.textContent = item.label + ' · ' + sizeText + ' · ' + speedText;
+        chip.textContent = item.label;
         card.appendChild(chip);
 
         const img = document.createElement('img');
@@ -246,61 +208,29 @@
         img.alt = item.label; img.loading = 'lazy';
         card.appendChild(img);
 
-        function select() { setLogoByIndex(idx); hideOverlay(); setDirectionRandom(); }
-        card.addEventListener('click', select);
-
-        // TV-Fernbedienung: Pfeiltasten + OK zum Navigieren
-        card.addEventListener('keydown', (e) => {
-          const k = e.key || '', c = e.keyCode || 0;
-          const cards = Array.from(grid.querySelectorAll('.card'));
-          const i     = cards.indexOf(card);
-          const cols  = Math.max(1, Math.round(grid.offsetWidth / Math.max(1, card.offsetWidth)));
-          if      (k === 'Enter' || k === ' '      || c === 13 || c === 32) { select(); }
-          else if (k === 'ArrowRight' || k === 'Right' || c === 39)         { cards[(i + 1) % cards.length].focus(); }
-          else if (k === 'ArrowLeft'  || k === 'Left'  || c === 37)         { cards[(i - 1 + cards.length) % cards.length].focus(); }
-          else if (k === 'ArrowDown'  || k === 'Down'  || c === 40)         { cards[Math.min(i + cols, cards.length - 1)].focus(); }
-          else if (k === 'ArrowUp'    || k === 'Up'    || c === 38)         { cards[Math.max(i - cols, 0)].focus(); }
-          else if (k === 'Escape'     || k === 'Back'  || c === 27)         { hideOverlay(); }
-          else return;
-          e.preventDefault();
-        });
-
+        card.addEventListener('click', () => { setLogoByIndex(idx); hideOverlay(); setDirectionRandom(); });
         grid.appendChild(card);
       });
     }
 
-    function showOverlay() {
-      buildGrid();
-      overlay.style.display = 'flex';
-      // Ersten Card fokussieren (für TV-Fernbedienung)
-      requestAnimationFrame(() => { const c = grid.querySelector('.card'); if (c) c.focus(); });
-    }
+    function showOverlay() { buildGrid(); overlay.style.display = 'flex'; }
     function hideOverlay() { overlay.style.display = 'none'; }
 
     overlay.addEventListener('mousedown',  (e) => { if (e.target === overlay) hideOverlay(); });
     overlay.addEventListener('touchstart', (e) => { if (e.target === overlay) hideOverlay(); }, { passive: true });
 
-    // ==========================================================================
-    // TASTATUR – TV-Fernbedienung + Desktop
-    // ==========================================================================
     document.addEventListener('keydown', (e) => {
-      const k = e.key || '', c = e.keyCode || 0;
       if (overlay.style.display === 'flex') {
-        if (k === 'Escape' || c === 27) { hideOverlay(); e.preventDefault(); }
-        return;
+        if (e.key === 'Escape' || e.keyCode === 27) { hideOverlay(); e.preventDefault(); }
       }
-      if      (k === 'Enter' || k === ' '                                         || c === 13 || c === 32) { showOverlay(); e.preventDefault(); }
-      else if (k === 'f' || k === 'F' || k === 'ColorF3Blue' || c === 406) { toggleFullscreen(); e.preventDefault(); }
     });
 
-    // ==========================================================================
-    // TOUCH / MAUS – Short-Tap = nächstes Logo, Long-Press = Overlay
-    // ==========================================================================
+    // LONG-PRESS zum Öffnen des Overlays
     let pressTimer = null, pressStartPos = null;
     const MOVE_TOLERANCE_PX = 8;
 
     function startPress(px, py) {
-      if (overlay.style.display === 'flex') return; // Overlay offen → ignorieren
+      if (overlay.style.display === 'flex') return;
       clearTimeout(pressTimer);
       pressStartPos = { x: px, y: py };
       pressTimer = setTimeout(() => { pressTimer = null; showOverlay(); }, LONG_PRESS_MS);
@@ -308,62 +238,19 @@
 
     function movePress(px, py) {
       if (!pressStartPos) return;
-      if (Math.hypot(px - pressStartPos.x, py - pressStartPos.y) > MOVE_TOLERANCE_PX) endPress(false);
+      if (Math.hypot(px - pressStartPos.x, py - pressStartPos.y) > MOVE_TOLERANCE_PX) endPress();
     }
 
-    function endPress(doShortTap) {
-      const wasActive = pressTimer !== null;
-      clearTimeout(pressTimer); pressTimer = null; pressStartPos = null;
-      if (doShortTap && wasActive && overlay.style.display !== 'flex') cycleNext();
-    }
+    function endPress() { clearTimeout(pressTimer); pressTimer = null; pressStartPos = null; }
 
     window.addEventListener('touchstart',  (e) => { const t = e.touches[0]; startPress(t.clientX, t.clientY); }, { passive: true });
     window.addEventListener('touchmove',   (e) => { const t = e.touches[0]; if (t) movePress(t.clientX, t.clientY); }, { passive: true });
-    window.addEventListener('touchend',    () => endPress(false),  { passive: true });
-    window.addEventListener('touchcancel', () => endPress(false), { passive: true });
+    window.addEventListener('touchend',    () => endPress(), { passive: true });
+    window.addEventListener('touchcancel', () => endPress(), { passive: true });
 
     window.addEventListener('mousedown', (e) => { if (e.button !== 0) return; startPress(e.clientX, e.clientY); });
     window.addEventListener('mousemove', (e) => movePress(e.clientX, e.clientY));
-    window.addEventListener('mouseup',   () => endPress(false));
-
-    // ==========================================================================
-    // HINT – kurz einblenden, dann ausblenden
-    // ==========================================================================
-    setTimeout(() => { const h = document.getElementById('hint'); if (h) h.style.opacity = '0'; }, 3500);
-
-    // ==========================================================================
-    // VOLLBILD
-    // ==========================================================================
-    function toggleFullscreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
-      } else {
-        document.exitFullscreen().catch(() => {});
-      }
-    }
-
-    const fsBtn = document.getElementById('fsBtn');
-    fsBtn.addEventListener('click', toggleFullscreen);
-
-    document.addEventListener('fullscreenchange', () => {
-      fsBtn.textContent = document.fullscreenElement ? '✕' : '⛶';
-    });
-
-    // Button bei Mausbewegung kurz einblenden, dann wieder ausblenden
-    let fsBtnTimer;
-    window.addEventListener('mousemove', () => {
-      fsBtn.style.opacity = '1';
-      clearTimeout(fsBtnTimer);
-      fsBtnTimer = setTimeout(() => { fsBtn.style.opacity = '0'; }, 2500);
-    }, { passive: true });
-    setTimeout(() => { fsBtn.style.opacity = '0'; }, 4000);
-
-    // ==========================================================================
-    // SERVICE WORKER (PWA / Offline)
-    // ==========================================================================
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
-    }
+    window.addEventListener('mouseup',   () => endPress());
   </script>
 </body>
 </html>
