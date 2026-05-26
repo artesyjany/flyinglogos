@@ -290,8 +290,6 @@
         return;
       }
       if      (k === 'Enter' || k === ' '                                         || c === 13 || c === 32) { showOverlay(); e.preventDefault(); }
-      else if (k === 'ArrowRight' || k === 'Right' || k === 'ArrowDown'  || k === 'Down'  || c === 39 || c === 40) { cycleNext(); e.preventDefault(); }
-      else if (k === 'ArrowLeft'  || k === 'Left'  || k === 'ArrowUp'    || k === 'Up'    || c === 37 || c === 38) { cyclePrev(); e.preventDefault(); }
       else if (k === 'f' || k === 'F' || k === 'ColorF3Blue' || c === 406) { toggleFullscreen(); e.preventDefault(); }
     });
 
@@ -321,12 +319,12 @@
 
     window.addEventListener('touchstart',  (e) => { const t = e.touches[0]; startPress(t.clientX, t.clientY); }, { passive: true });
     window.addEventListener('touchmove',   (e) => { const t = e.touches[0]; if (t) movePress(t.clientX, t.clientY); }, { passive: true });
-    window.addEventListener('touchend',    () => endPress(true),  { passive: true });
+    window.addEventListener('touchend',    () => endPress(false),  { passive: true });
     window.addEventListener('touchcancel', () => endPress(false), { passive: true });
 
     window.addEventListener('mousedown', (e) => { if (e.button !== 0) return; startPress(e.clientX, e.clientY); });
     window.addEventListener('mousemove', (e) => movePress(e.clientX, e.clientY));
-    window.addEventListener('mouseup',   () => endPress(true));
+    window.addEventListener('mouseup',   () => endPress(false));
 
     // ==========================================================================
     // HINT – kurz einblenden, dann ausblenden
