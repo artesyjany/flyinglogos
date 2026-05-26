@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Flying Logos</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #000; overflow: hidden; touch-action: none; }
+    #canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; will-change: transform; }
+
+    .overlay { position: fixed; top: 0; right: 0; bottom: 0; left: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 10; }
+    .panel { width: min(92vw, 1000px); max-height: 86vh; overflow: auto; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.15); border-radius: 18px; padding: clamp(12px, 2.5vw, 24px); box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(40vw, 260px), 1fr)); gap: clamp(10px, 2vw, 18px); }
+    .card { position: relative; border: 1px solid rgba(255,255,255,0.14); border-radius: 14px; padding: clamp(10px, 2vw, 16px); cursor: pointer; transition: transform .12s ease, outline-color .1s ease; display: flex; align-items: center; justify-content: center; aspect-ratio: 16/9; outline: 3px solid transparent; outline-offset: 3px; }
+    .card:hover, .card:focus { transform: translateY(-2px); outline-color: rgba(255,255,255,0.85); }
+    .card img { max-width: 100%; max-height: 100%; object-fit: contain; background: transparent; pointer-events: none; }
+    .chip { position: absolute; left: 10px; top: 10px; font: 11px system-ui,Segoe UI,Roboto,Arial; color: #fff; background: rgba(0,0,0,0.45); padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.25); pointer-events: none; }
+
+    #fsBtn { position: fixed; bottom: 20px; right: 20px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; font-size: 22px; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 6; opacity: 0; transition: opacity 0.5s ease; touch-action: manipulation; }
+
+    @media (max-width: 560px) {
+      .grid { grid-template-columns: repeat(auto-fill, minmax(45vw, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" aria-label="Logo Screensaver"></canvas>
+  <button id="fsBtn" aria-label="Vollbild">⛶</button>
+
+  <div id="overlay" class="overlay" role="dialog" aria-modal="true">
+    <div class="panel">
+      <div id="grid" class="grid"></div>
+    </div>
+  </div>
+
+  <script>
+    const LOGOS = [
+      { label: 'Supreme', src: 'img/supreme.png', bg: '#000000', pageBg: '#0b0b0b', sizeVmin: 25, speedVminPerSec: 28 },
+      { label: 'Mertra',  src: 'img/mertra.png',  bg: '#ffffff', pageBg: '#ffffff', sizeVmin: 30, speedVminPerSec: 24 },
+      { label: 'Mertra2', src: 'img/mertra2.png', bg: '#ffffff', pageBg: '#ffffff', sizeVmin: 30, speedVminPerSec: 24 },
+      { label: 'Stussy',  src: 'img/stussy.png',  bg: '#ffffff', pageBg: '#ffffff', sizeVmin: 30, speedVminPerSec: 24 },
+    ];
+
+    const DEFAULT_SIZE_VMIN        = 18;
+    const DEFAULT_SPEED_VMIN_PER_SEC = 26;
+    const LONG_PRESS_MS            = 600;
+
+    // CANVAS
+    const canvas = document.getElementById('canvas');
+    const ctx    = canvas.getContext('2d');
+
+    function resize() {
+      const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+      const w = window.innerWidth, h = window.innerHeight;
+      canvas.style.width  = w + 'px';
+      canvas.style.height = h + 'px';
+      canvas.width  = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener('resize', () => { resize(); recalcVelocityMagnitude(); clampInside(); }, { passive: true });
+    resize();
+
+    // HINTERGRUND
+    const bgLayer = document.createElement('div');
+    Object.assign(bgLayer.style, { position: 'fixed', top: '0', right: '0', bottom: '0', left: '0', zIndex: '-1', transition: 'background 0.5s ease' });
+    document.body.appendChild(bgLayer);
+
+    function setBackground(bg) {
+      bgLayer.style.background       = bg || '#000';
+      document.body.style.background = bg || '#000';
+    }
+
+    // LOGO LOADER
+    const logoImg = new Image();
+    logoImg.decoding = 'async';
+    let logoReady = false, svgAspect = null, currentLogoIndex = 0;
+
+    async function inferSvgAspectRatio(src) {
+      try {
+        const res = await fetch(src, { cache: 'no-store' });
+        if (!res.ok) return null;
+        const txt = await res.text();
+        const m = txt.match(/viewBox\s*=\s*"([^"]+)"/i);
+        if (!m) return null;
+        const parts = m[1].trim().split(/\s+/).map(Number);
+        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) return parts[2] / parts[3];
+      } catch (e) {}
+      return null;
+    }
+
+    async function setLogoByIndex(idx) {
+      currentLogoIndex = ((idx % LOGOS.length) + LOGOS.length) % LOGOS.length;
+      logoReady = false; svgAspect = null;
+      setBackground(LOGOS[currentLogoIndex].pageBg);
+      logoImg.onload = async () => {
+        if (!logoImg.naturalWidth || !logoImg.naturalHeight) svgAspect = await inferSvgAspectRatio(logoImg.src);
+        logoReady = true;
+        recalcVelocityMagnitude();
+        clampInside();
+      };
+      logoImg.onerror = () => { logoReady = false; };
+      const raw = LOGOS[currentLogoIndex].src;
+      logoImg.src = raw.startsWith('img/') ? ('./' + raw) : raw;
+    }
+
+    // ANIMATION
+    let x = 80, y = 80, vx = 1, vy = 0.7, speedMagnitudePx = 220;
+
+    function currentTargetWidthPx() {
+      const cfg = LOGOS[currentLogoIndex] || {};
+      if (typeof cfg.sizePx === 'number' && cfg.sizePx > 0) return cfg.sizePx;
+      const vmin = Math.min(window.innerWidth, window.innerHeight);
+      return ((typeof cfg.sizeVmin === 'number' && cfg.sizeVmin > 0 ? cfg.sizeVmin : DEFAULT_SIZE_VMIN) / 100) * vmin;
+    }
+
+    function currentSpeedMagnitudePxPerSec() {
+      const cfg = LOGOS[currentLogoIndex] || {};
+      if (typeof cfg.speedPxPerSec === 'number' && cfg.speedPxPerSec > 0) return cfg.speedPxPerSec;
+      const vmin = Math.min(window.innerWidth, window.innerHeight);
+      const speedVmin = typeof cfg.speedVminPerSec === 'number' && cfg.speedVminPerSec > 0 ? cfg.speedVminPerSec : DEFAULT_SPEED_VMIN_PER_SEC;
+      let px = (speedVmin / 100) * vmin;
+      if (typeof cfg.speedFactor === 'number' && cfg.speedFactor > 0) px *= cfg.speedFactor;
+      const sizePenalty = 1 - Math.min(0.35, (currentTargetWidthPx() / Math.hypot(window.innerWidth, window.innerHeight)) * 0.6);
+      return Math.max(40, px * sizePenalty);
+    }
+
+    function setDirectionRandom() {
+      const angle = Math.random() * Math.PI * 2;
+      vx = Math.cos(angle); vy = Math.sin(angle);
+    }
+
+    function recalcVelocityMagnitude() {
+      speedMagnitudePx = currentSpeedMagnitudePxPerSec();
+      const len = Math.hypot(vx, vy) || 1; vx /= len; vy /= len;
+    }
+
+    function logoDrawSize() {
+      const w = currentTargetWidthPx();
+      if (logoImg.naturalWidth && logoImg.naturalHeight) {
+        const s = w / logoImg.naturalWidth;
+        return { w, h: logoImg.naturalHeight * s };
+      }
+      return { w, h: svgAspect ? w / svgAspect : w };
+    }
+
+    function clampInside() {
+      const { w, h } = logoDrawSize();
+      x = Math.min(Math.max(0, x), Math.max(0, window.innerWidth  - w));
+      y = Math.min(Math.max(0, y), Math.max(0, window.innerHeight - h));
+    }
+
+    function update(dt) {
+      x += vx * speedMagnitudePx * dt;
+      y += vy * speedMagnitudePx * dt;
+      const { w, h } = logoDrawSize();
+      let bounced = false;
+      if (x <= 0)                      { x = 0;                      vx =  Math.abs(vx); bounced = true; }
+      if (y <= 0)                      { y = 0;                      vy =  Math.abs(vy); bounced = true; }
+      if (x + w >= window.innerWidth)  { x = window.innerWidth  - w; vx = -Math.abs(vx); bounced = true; }
+      if (y + h >= window.innerHeight) { y = window.innerHeight - h; vy = -Math.abs(vy); bounced = true; }
+      if (bounced) {
+        const angle = Math.atan2(vy, vx) + (Math.random() - 0.5) * 0.12;
+        vx = Math.cos(angle); vy = Math.sin(angle);
+      }
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!logoReady) return;
+      const { w, h } = logoDrawSize();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(logoImg, x, y, w, h);
+    }
+
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    setLogoByIndex(0);
+    setDirectionRandom();
+    requestAnimationFrame(loop);
+
+    // OVERLAY – Logo-Auswahl per Long-Press
+    const overlay = document.getElementById('overlay');
+    const grid    = document.getElementById('grid');
+
+    function buildGrid() {
+      grid.innerHTML = '';
+      LOGOS.forEach((item, idx) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.background = item.bg || '#000';
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('role', 'button');
+        card.setAttribute('aria-label', item.label);
+
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.textContent = item.label;
+        card.appendChild(chip);
+
+        const img = document.createElement('img');
+        img.src = item.src.startsWith('img/') ? ('./' + item.src) : item.src;
+        img.alt = item.label; img.loading = 'lazy';
+        card.appendChild(img);
+
+        card.addEventListener('click', () => { setLogoByIndex(idx); hideOverlay(); setDirectionRandom(); });
+        grid.appendChild(card);
+      });
+    }
+
+    function showOverlay() { buildGrid(); overlay.style.display = 'flex'; }
+    function hideOverlay() { overlay.style.display = 'none'; }
+
+    overlay.addEventListener('mousedown',  (e) => { if (e.target === overlay) hideOverlay(); });
+    overlay.addEventListener('touchstart', (e) => { if (e.target === overlay) hideOverlay(); }, { passive: true });
+
+    document.addEventListener('keydown', (e) => {
+      if (overlay.style.display === 'flex') {
+        if (e.key === 'Escape' || e.keyCode === 27) { hideOverlay(); e.preventDefault(); }
+      }
+    });
+
+    // LONG-PRESS zum Öffnen des Overlays
+    let pressTimer = null, pressStartPos = null;
+    const MOVE_TOLERANCE_PX = 8;
+
+    function startPress(px, py) {
+      if (overlay.style.display === 'flex') return;
+      clearTimeout(pressTimer);
+      pressStartPos = { x: px, y: py };
+      pressTimer = setTimeout(() => { pressTimer = null; showOverlay(); }, LONG_PRESS_MS);
+    }
+
+    function movePress(px, py) {
+      if (!pressStartPos) return;
+      if (Math.hypot(px - pressStartPos.x, py - pressStartPos.y) > MOVE_TOLERANCE_PX) endPress();
+    }
+
+    function endPress() { clearTimeout(pressTimer); pressTimer = null; pressStartPos = null; }
+
+    window.addEventListener('touchstart',  (e) => { const t = e.touches[0]; startPress(t.clientX, t.clientY); }, { passive: true });
+    window.addEventListener('touchmove',   (e) => { const t = e.touches[0]; if (t) movePress(t.clientX, t.clientY); }, { passive: true });
+    window.addEventListener('touchend',    () => endPress(), { passive: true });
+    window.addEventListener('touchcancel', () => endPress(), { passive: true });
+
+    window.addEventListener('mousedown', (e) => { if (e.button !== 0) return; startPress(e.clientX, e.clientY); });
+    window.addEventListener('mousemove', (e) => movePress(e.clientX, e.clientY));
+    window.addEventListener('mouseup',   () => endPress());
+
+    // VOLLBILD
+    const fsBtn = document.getElementById('fsBtn');
+
+    function toggleFullscreen() {
+      const el = document.documentElement;
+      const isFs = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
+      if (!isFs) {
+        const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+        if (req) req.call(el, { navigationUI: 'hide' });
+      } else {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+        if (exit) exit.call(document);
+      }
+    }
+
+    function isFullscreen() {
+      return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
+    }
+
+    function showFsBtn() {
+      fsBtn.style.opacity = '1';
+      clearTimeout(fsBtn._timer);
+      fsBtn._timer = setTimeout(() => { fsBtn.style.opacity = '0'; }, 3000);
+    }
+
+    fsBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleFullscreen(); });
+
+    ['fullscreenchange','webkitfullscreenchange','mozfullscreenchange'].forEach(ev => {
+      document.addEventListener(ev, () => {
+        fsBtn.textContent = isFullscreen() ? '✕' : '⛶';
+        showFsBtn();
+      });
+    });
+
+    // Button bei Touch/Maus kurz einblenden (nur bei echter Positionsänderung)
+    window.addEventListener('touchstart', showFsBtn, { passive: true });
+    let _lastMX = -1, _lastMY = -1;
+    window.addEventListener('mousemove', (e) => {
+      if (e.clientX !== _lastMX || e.clientY !== _lastMY) {
+        _lastMX = e.clientX; _lastMY = e.clientY;
+        showFsBtn();
+      }
+    }, { passive: true });
+
+    // Blauer TV-Knopf (keyCode 406)
+    document.addEventListener('keydown', (e) => {
+      if ((e.key === 'ColorF3Blue' || e.keyCode === 406) && overlay.style.display !== 'flex') {
+        toggleFullscreen(); e.preventDefault();
+      }
+    });
+  </script>
+</body>
+</html>
