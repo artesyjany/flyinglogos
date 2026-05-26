@@ -283,12 +283,21 @@
     fsBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleFullscreen(); });
 
     ['fullscreenchange','webkitfullscreenchange','mozfullscreenchange'].forEach(ev => {
-      document.addEventListener(ev, () => { fsBtn.textContent = isFullscreen() ? '✕' : '⛶'; });
+      document.addEventListener(ev, () => {
+        fsBtn.textContent = isFullscreen() ? '✕' : '⛶';
+        showFsBtn();
+      });
     });
 
-    // Button bei Touch/Maus kurz einblenden
+    // Button bei Touch/Maus kurz einblenden (nur bei echter Positionsänderung)
     window.addEventListener('touchstart', showFsBtn, { passive: true });
-    window.addEventListener('mousemove',  showFsBtn, { passive: true });
+    let _lastMX = -1, _lastMY = -1;
+    window.addEventListener('mousemove', (e) => {
+      if (e.clientX !== _lastMX || e.clientY !== _lastMY) {
+        _lastMX = e.clientX; _lastMY = e.clientY;
+        showFsBtn();
+      }
+    }, { passive: true });
 
     // Blauer TV-Knopf (keyCode 406)
     document.addEventListener('keydown', (e) => {
