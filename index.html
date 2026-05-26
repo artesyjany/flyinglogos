@@ -259,11 +259,19 @@
     const fsBtn = document.getElementById('fsBtn');
 
     function toggleFullscreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+      const el = document.documentElement;
+      const isFs = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
+      if (!isFs) {
+        const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+        if (req) req.call(el, { navigationUI: 'hide' });
       } else {
-        document.exitFullscreen().catch(() => {});
+        const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+        if (exit) exit.call(document);
       }
+    }
+
+    function isFullscreen() {
+      return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
     }
 
     function showFsBtn() {
@@ -273,8 +281,9 @@
     }
 
     fsBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleFullscreen(); });
-    document.addEventListener('fullscreenchange', () => {
-      fsBtn.textContent = document.fullscreenElement ? '✕' : '⛶';
+
+    ['fullscreenchange','webkitfullscreenchange','mozfullscreenchange'].forEach(ev => {
+      document.addEventListener(ev, () => { fsBtn.textContent = isFullscreen() ? '✕' : '⛶'; });
     });
 
     // Button bei Touch/Maus kurz einblenden
